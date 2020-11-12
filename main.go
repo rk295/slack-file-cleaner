@@ -39,10 +39,14 @@ func main() {
 	api := slack.New(slackToken)
 	s.slack = api
 
-	s.listFiles()
+	err := s.listFiles()
+	if err != nil {
+		s.log.Error(err)
+		os.Exit(1)
+	}
 }
 
-func (s *server) listFiles() {
+func (s *server) listFiles() error {
 
 	now := time.Now()
 	day := 24 * time.Hour
@@ -58,13 +62,16 @@ func (s *server) listFiles() {
 	// lazzily ignoring pagination. It'll run every night, we don't upload 1000
 	// a day so it will eventually catch up.
 	files, _, err := s.slack.GetFiles(params)
-
 	if err != nil {
-		s.log.Error(err)
-		return
+		return err
 	}
 
-	s.log.Infof("found %v files for deletion", len(files))
+	fileCount := len(files)
+	if fileCount == 0 {
+		return nil
+	}
+
+	s.log.Infof("found %v files for deletion", fileCount)
 
 	for _, file := range files {
 
@@ -80,6 +87,8 @@ func (s *server) listFiles() {
 			s.log.Infof("delete of %s failed: %s", file.ID, err)
 		}
 	}
+
+	return nil
 }
 
 func (s *server) getFile(file slack.File) error {
