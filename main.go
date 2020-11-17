@@ -44,14 +44,21 @@ func main() {
 
 	ctx := context.Background()
 
-	err := s.listFiles(ctx)
+	files, err := s.listFiles(ctx)
 	if err != nil {
 		s.log.Error(err)
 		os.Exit(1)
 	}
+
+	err = s.processFiles(ctx, files)
+	if err != nil {
+		s.log.Error(err)
+		os.Exit(1)
+	}
+
 }
 
-func (s *server) listFiles(ctx context.Context) error {
+func (s *server) listFiles(ctx context.Context) (files []slack.File, err error) {
 
 	now := time.Now()
 	day := 24 * time.Hour
@@ -60,21 +67,38 @@ func (s *server) listFiles(ctx context.Context) error {
 	to := slack.JSONTime(oneMonth.Unix())
 
 	params := slack.GetFilesParameters{
-		Count:       1000,
+		Count:       100,
 		TimestampTo: to,
 		ShowHidden:  true,
+		Page:        1,
 	}
 
-	// lazzily ignoring pagination. It'll run every night, we don't upload 1000
-	// a day so it will eventuatiglly catch up.
-	files, _, err := s.slack.GetFiles(params)
-	if err != nil {
-		return err
-	}
+	files, paging, err := s.slack.GetFiles(params)
+	for err == nil {
+		params.Page++
+		if params.Page > paging.Pages {
+			break
+		}
 
+		f, _, err := s.slack.GetFiles(params)
+		if err == nil {
+			files = append(files, f...)
+		} else if rateLimitedError, ok := err.(*slack.RateLimitedError); ok {
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+			case <-time.After(rateLimitedError.RetryAfter):
+				err = nil
+			}
+		}
+	}
+	return files, err
+}
+
+func (s *server) processFiles(ctx context.Context, files []slack.File) error {
 	fileCount := len(files)
 	if fileCount == 0 {
-		s.log.Infof("found no files to delete that were older than %d", daysOld)
+		s.log.Infof("found no files to delete that were older than %d days", daysOld)
 		return nil
 	}
 
@@ -121,7 +145,7 @@ func (s *server) deleteFile(ctx context.Context, fileID string) (err error) {
 func (s *server) getFile(file slack.File) error {
 
 	if file.URLPrivateDownload == "" {
-		s.log.Debugf("URLPrivateDownload for %s is empty, skipping", file.ID)
+		s.log.Debugf("URLPrivateDownload field for file %s is empty, skipping download", file.ID)
 		return nil
 	}
 
