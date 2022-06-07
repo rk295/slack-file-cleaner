@@ -26,7 +26,11 @@ func main() {
 
 	s := &server{}
 
-	logger, _ := zap.NewProduction()
+	// Development is prettier, but I want to force InfoLevel
+	loggerCfg := zap.NewDevelopmentConfig()
+	loggerCfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+	logger, _ := loggerCfg.Build()
+
 	defer logger.Sync()
 	log := logger.Sugar()
 	s.log = log
