@@ -26,12 +26,12 @@ func main() {
 
 	s := &server{}
 
-	logger, _ := zap.NewDevelopment()
+	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 	log := logger.Sugar()
 	s.log = log
 
-	s.log.Info("starting")
+	s.log.Debug("starting")
 
 	slackToken := os.Getenv(tokenEnvVar)
 	if slackToken == "" {
@@ -98,27 +98,27 @@ func (s *server) listFiles(ctx context.Context) (files []slack.File, err error) 
 func (s *server) processFiles(ctx context.Context, files []slack.File) error {
 	fileCount := len(files)
 	if fileCount == 0 {
-		s.log.Infof("found no files to delete that were older than %d days", daysOld)
+		s.log.Debugf("found no files to delete that were older than %d days", daysOld)
 		return nil
 	}
 
-	s.log.Infof("found %v files for deletion", fileCount)
+	s.log.Debugf("found %v files for deletion", fileCount)
 
 	for _, file := range files {
 
 		if file.Mode == "hidden_by_limit" {
-			s.log.Infof("file id %s is hidden by free quota limit, won't download before deleting", file.ID)
+			s.log.Debugf("file id %s is hidden by free quota limit, won't download before deleting", file.ID)
 		} else {
 			err := s.getFile(file)
 			if err != nil {
-				s.log.Infof("error saving file %s: %s", file.ID, err)
+				s.log.Errorf("error saving file %s: %s", file.ID, err)
 				continue
 			}
 		}
 
 		err := s.deleteFile(ctx, file.ID)
 		if err != nil {
-			s.log.Info(err)
+			s.log.Error(err)
 		}
 	}
 
@@ -145,7 +145,7 @@ func (s *server) deleteFile(ctx context.Context, fileID string) (err error) {
 func (s *server) getFile(file slack.File) error {
 
 	if file.URLPrivateDownload == "" {
-		s.log.Debugf("URLPrivateDownload field for file %s is empty, skipping download", file.ID)
+		s.log.Warnf("URLPrivateDownload field for file %s is empty, skipping download", file.ID)
 		return nil
 	}
 
