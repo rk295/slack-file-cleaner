@@ -31,6 +31,7 @@ type UserProfile struct {
 	Image48               string                  `json:"image_48"`
 	Image72               string                  `json:"image_72"`
 	Image192              string                  `json:"image_192"`
+	Image512              string                  `json:"image_512"`
 	ImageOriginal         string                  `json:"image_original"`
 	Title                 string                  `json:"title"`
 	BotID                 string                  `json:"bot_id,omitempty"`
@@ -468,9 +469,7 @@ func (api *Client) SetUserPhoto(image string, params UserSetPhotoParams) error {
 // SetUserPhotoContext changes the currently authenticated user's profile image using a custom context
 func (api *Client) SetUserPhotoContext(ctx context.Context, image string, params UserSetPhotoParams) (err error) {
 	response := &SlackResponse{}
-	values := url.Values{
-		"token": {api.token},
-	}
+	values := url.Values{}
 	if params.CropX != DEFAULT_USER_PHOTO_CROP_X {
 		values.Add("crop_x", strconv.Itoa(params.CropX))
 	}
@@ -481,7 +480,7 @@ func (api *Client) SetUserPhotoContext(ctx context.Context, image string, params
 		values.Add("crop_w", strconv.Itoa(params.CropW))
 	}
 
-	err = postLocalWithMultipartResponse(ctx, api.httpclient, api.endpoint+"users.setPhoto", image, "image", values, response, api)
+	err = postLocalWithMultipartResponse(ctx, api.httpclient, api.endpoint+"users.setPhoto", image, "image", api.token, values, response, api)
 	if err != nil {
 		return err
 	}
@@ -513,7 +512,7 @@ func (api *Client) DeleteUserPhotoContext(ctx context.Context) (err error) {
 //
 // For more information see SetUserRealNameContextWithUser
 func (api *Client) SetUserRealName(realName string) error {
-	return api.SetUserRealNameContextWithUser(context.Background(), realName, realName)
+	return api.SetUserRealNameContextWithUser(context.Background(), "", realName)
 }
 
 // SetUserRealNameContextWithUser will set a real name for the provided user with a custom context
@@ -531,9 +530,13 @@ func (api *Client) SetUserRealNameContextWithUser(ctx context.Context, user, rea
 	}
 
 	values := url.Values{
-		"user":    {user},
 		"token":   {api.token},
 		"profile": {string(profile)},
+	}
+
+	// optional field. It should not be set if empty
+	if user != "" {
+		values["user"] = []string{user}
 	}
 
 	response := &userResponseFull{}
@@ -557,7 +560,7 @@ func (api *Client) SetUserCustomStatus(statusText, statusEmoji string, statusExp
 //
 // For more information see SetUserCustomStatus
 func (api *Client) SetUserCustomStatusContext(ctx context.Context, statusText, statusEmoji string, statusExpiration int64) error {
-	return api.SetUserCustomStatusContextWithUser(context.Background(), "", statusText, statusEmoji, statusExpiration)
+	return api.SetUserCustomStatusContextWithUser(ctx, "", statusText, statusEmoji, statusExpiration)
 }
 
 // SetUserCustomStatusWithUser will set a custom status and emoji for the provided user.
@@ -598,9 +601,13 @@ func (api *Client) SetUserCustomStatusContextWithUser(ctx context.Context, user,
 	}
 
 	values := url.Values{
-		"user":    {user},
 		"token":   {api.token},
 		"profile": {string(profile)},
+	}
+
+	// optional field. It should not be set if empty
+	if user != "" {
+		values["user"] = []string{user}
 	}
 
 	response := &userResponseFull{}
@@ -623,9 +630,15 @@ func (api *Client) UnsetUserCustomStatusContext(ctx context.Context) error {
 	return api.SetUserCustomStatusContext(ctx, "", "", 0)
 }
 
+// GetUserProfileParameters are the parameters required to get user profile
+type GetUserProfileParameters struct {
+	UserID        string
+	IncludeLabels bool
+}
+
 // GetUserProfile retrieves a user's profile information.
-func (api *Client) GetUserProfile(userID string, includeLabels bool) (*UserProfile, error) {
-	return api.GetUserProfileContext(context.Background(), userID, includeLabels)
+func (api *Client) GetUserProfile(params *GetUserProfileParameters) (*UserProfile, error) {
+	return api.GetUserProfileContext(context.Background(), params)
 }
 
 type getUserProfileResponse struct {
@@ -634,9 +647,13 @@ type getUserProfileResponse struct {
 }
 
 // GetUserProfileContext retrieves a user's profile information with a context.
-func (api *Client) GetUserProfileContext(ctx context.Context, userID string, includeLabels bool) (*UserProfile, error) {
-	values := url.Values{"token": {api.token}, "user": {userID}}
-	if includeLabels {
+func (api *Client) GetUserProfileContext(ctx context.Context, params *GetUserProfileParameters) (*UserProfile, error) {
+	values := url.Values{"token": {api.token}}
+
+	if params.UserID != "" {
+		values.Add("user", params.UserID)
+	}
+	if params.IncludeLabels {
 		values.Add("include_labels", "true")
 	}
 	resp := &getUserProfileResponse{}

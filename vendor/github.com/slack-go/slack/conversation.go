@@ -455,9 +455,10 @@ func (api *Client) GetConversationRepliesContext(ctx context.Context, params *Ge
 
 type GetConversationsParameters struct {
 	Cursor          string
-	ExcludeArchived string
+	ExcludeArchived bool
 	Limit           int
 	Types           []string
+	TeamID          string
 }
 
 // GetConversations returns the list of channels in a Slack team
@@ -479,8 +480,11 @@ func (api *Client) GetConversationsContext(ctx context.Context, params *GetConve
 	if params.Types != nil {
 		values.Add("types", strings.Join(params.Types, ","))
 	}
-	if params.ExcludeArchived == "true" {
-		values.Add("exclude_archived", "true")
+	if params.ExcludeArchived {
+		values.Add("exclude_archived", strconv.FormatBool(params.ExcludeArchived))
+	}
+	if params.TeamID != "" {
+		values.Add("team_id", params.TeamID)
 	}
 
 	response := struct {
@@ -620,4 +624,26 @@ func (api *Client) GetConversationHistoryContext(ctx context.Context, params *Ge
 	}
 
 	return &response, response.Err()
+}
+
+// MarkConversation sets the read mark of a conversation to a specific point
+func (api *Client) MarkConversation(channel, ts string) (err error) {
+	return api.MarkConversationContext(context.Background(), channel, ts)
+}
+
+// MarkConversationContext sets the read mark of a conversation to a specific point with a custom context
+func (api *Client) MarkConversationContext(ctx context.Context, channel, ts string) error {
+	values := url.Values{
+		"token":   {api.token},
+		"channel": {channel},
+		"ts":      {ts},
+	}
+
+	response := &SlackResponse{}
+
+	err := api.postMethod(ctx, "conversations.mark", values, response)
+	if err != nil {
+		return err
+	}
+	return response.Err()
 }
